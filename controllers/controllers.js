@@ -16,9 +16,7 @@ if (connection) console.log(`MySQL Database connected with host: ${process.env.D
 // checkGroup(username, group) to check if a user is in a group
 exports.Checkgroup = async function (userid, groupname) {
   //get user from database
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM user WHERE username = ?", [userid]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [userid]);
   if (row.length === 0) {
     return false;
   }
@@ -45,9 +43,7 @@ exports.checkLogin = catchAsyncErrors(async function (token) {
     return false;
   }
 
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM user WHERE username = ?", [decoded.username]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [decoded.username]);
   const user = row[0];
   if (user === undefined) {
     return false;
@@ -57,6 +53,16 @@ exports.checkLogin = catchAsyncErrors(async function (token) {
     return false;
   }
   return true;
+});
+
+//get user groups
+exports.getUserGroup = catchAsyncErrors(async function (token) {
+  let decoded;
+  decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+  const [row, fields] = await connection.promise().query("SELECT group_list FROM user WHERE username = ?", [decoded.username]);
+  const groups = row[0];
+  return groups;
 });
 
 // Login a user => /login
@@ -70,9 +76,7 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
   }
 
   //find user in database
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM user WHERE username = ?", [username]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username]);
   if (row.length === 0) {
     return next(new ErrorResponse("User not found", 401));
   }
@@ -120,12 +124,7 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
   //We need to check for password constraint, minimum character is 8 and maximum character is 10. It should include alphanumeric, number and special character. We do not care baout uppercase and lowercase.
   const passwordRegex = /^(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,10}$/;
   if (!passwordRegex.test(password)) {
-    return next(
-      new ErrorResponse(
-        "Password must be 8-10 characters long, contain at least one number, one letter and one special character",
-        400
-      )
-    );
+    return next(new ErrorResponse("Password must be 8-10 characters long, contain at least one number, one letter and one special character", 400));
   }
 
   //Bcrypt password with salt 10
@@ -134,10 +133,13 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
   try {
     result = await connection
       .promise()
-      .execute(
-        "INSERT INTO user (username, password, email, `group_list`, is_disabled) VALUES (?,?,?,?,?)",
-        [username, hashedPassword, email, group_list, 0]
-      );
+      .execute("INSERT INTO user (username, password, email, `group_list`, is_disabled) VALUES (?,?,?,?,?)", [
+        username,
+        hashedPassword,
+        email,
+        group_list,
+        0,
+      ]);
   } catch (err) {
     //check duplicate entry
     if (err.code === "ER_DUP_ENTRY") {
@@ -163,9 +165,7 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
   const group_name_list = group_name.split(",");
 
   //Check if group already exists
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM usergroups WHERE group_name IN (?)", [group_name_list]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM usergroups WHERE group_name IN (?)", [group_name_list]);
   if (row.length !== 0) {
     return next(new ErrorResponse("Group already exists", 400));
   }
@@ -180,9 +180,7 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
 
   //Insert group into database one by one
   for (let i = 0; i < group_name_list.length; i++) {
-    const result = await connection
-      .promise()
-      .execute("INSERT INTO usergroups (group_name) VALUES (?)", [group_name_list[i]]);
+    const result = await connection.promise().execute("INSERT INTO usergroups (group_name) VALUES (?)", [group_name_list[i]]);
 
     //@TODO:
     if (result[0].affectedRows === 0) {
@@ -198,9 +196,7 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
 
 // Get all users => /userController/getUsers
 exports.getUsers = catchAsyncErrors(async (req, res, next) => {
-  const [rows, fields] = await connection
-    .promise()
-    .query("SELECT username,email,group_list,is_disabled FROM user");
+  const [rows, fields] = await connection.promise().query("SELECT username,email,group_list,is_disabled FROM user");
   res.status(200).json({
     success: true,
     data: rows,
@@ -210,9 +206,7 @@ exports.getUsers = catchAsyncErrors(async (req, res, next) => {
 // Get a user => /userController/getUser/:username
 exports.getUser = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT username,email,group_list FROM user WHERE username = ?", [username]);
+  const [row, fields] = await connection.promise().query("SELECT username,email,group_list FROM user WHERE username = ?", [username]);
   if (row.length === 0) {
     return next(new ErrorResponse("User not found", 404));
   }
@@ -224,9 +218,7 @@ exports.getUser = catchAsyncErrors(async (req, res, next) => {
 
 // Toggle user status => /userController/toggleUserStatus/:username
 exports.toggleUserStatus = catchAsyncErrors(async (req, res, next) => {
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM user WHERE username = ?", [req.params.username]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [req.params.username]);
   if (row.length === 0) {
     return next(new ErrorResponse("User not found", 404));
   }
@@ -234,12 +226,7 @@ exports.toggleUserStatus = catchAsyncErrors(async (req, res, next) => {
   const user = row[0];
   //new status should be flip of current status
   const newStatus = user.is_disabled === 1 ? 0 : 1;
-  const result = await connection
-    .promise()
-    .execute("UPDATE user SET is_disabled = ? WHERE username = ?", [
-      newStatus,
-      req.params.username,
-    ]);
+  const result = await connection.promise().execute("UPDATE user SET is_disabled = ? WHERE username = ?", [newStatus, req.params.username]);
   if (result[0].affectedRows === 0) {
     return next(new ErrorResponse("Failed to update user", 500));
   }
@@ -252,9 +239,7 @@ exports.toggleUserStatus = catchAsyncErrors(async (req, res, next) => {
 
 // Update a user (admin) => /userController/updateUser/:username
 exports.updateUser = catchAsyncErrors(async (req, res, next) => {
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM user WHERE username = ?", [req.params.username]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [req.params.username]);
   if (row.length === 0) {
     return next(new ErrorResponse("User not found", 404));
   }
@@ -262,12 +247,7 @@ exports.updateUser = catchAsyncErrors(async (req, res, next) => {
   //We need to check for password constraint, minimum character is 8 and maximum character is 10. It should include alphanumeric, number and special character. We do not care baout uppercase and lowercase.
   const passwordRegex = /^(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,10}$/;
   if (!passwordRegex.test(req.body.password)) {
-    return next(
-      new ErrorResponse(
-        "Password must be 8-10 characters long, contain at least one number, one letter and one special character",
-        400
-      )
-    );
+    return next(new ErrorResponse("Password must be 8-10 characters long, contain at least one number, one letter and one special character", 400));
   }
 
   //the fields are optional to update, so we need to build the query dynamically
@@ -315,17 +295,13 @@ exports.updateUser = catchAsyncErrors(async (req, res, next) => {
 // Update user email (user) => /userController/updateUserEmail/:username
 exports.updateUserEmail = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM user WHERE username = ?", [username]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username]);
   if (row.length === 0) {
     return next(new ErrorResponse("User not found", 404));
   }
 
   const user = row[0];
-  const result = await connection
-    .promise()
-    .execute("UPDATE user SET email = ? WHERE username = ?", [req.body.email, username]);
+  const result = await connection.promise().execute("UPDATE user SET email = ? WHERE username = ?", [req.body.email, username]);
   if (result[0].affectedRows === 0) {
     return next(new ErrorResponse("Failed to update user", 500));
   }
@@ -339,9 +315,7 @@ exports.updateUserEmail = catchAsyncErrors(async (req, res, next) => {
 // Update user password (user) => /userController/updateUserPassword/:username
 exports.updateUserPassword = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
-  const [row, fields] = await connection
-    .promise()
-    .query("SELECT * FROM user WHERE username = ?", [username]);
+  const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username]);
   if (row.length === 0) {
     return next(new ErrorResponse("User not found", 404));
   }
@@ -350,20 +324,13 @@ exports.updateUserPassword = catchAsyncErrors(async (req, res, next) => {
   //password constraint check
   const passwordRegex = /^(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,10}$/;
   if (!passwordRegex.test(req.body.password)) {
-    return next(
-      new ErrorResponse(
-        "Password must be 8-10 characters long, contain at least one number, one letter and one special character",
-        400
-      )
-    );
+    return next(new ErrorResponse("Password must be 8-10 characters long, contain at least one number, one letter and one special character", 400));
   }
 
   //bcrypt new password with salt 10
   const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
-  const result = await connection
-    .promise()
-    .execute("UPDATE user SET password = ? WHERE username = ?", [hashedPassword, username]);
+  const result = await connection.promise().execute("UPDATE user SET password = ? WHERE username = ?", [hashedPassword, username]);
   if (result[0].affectedRows === 0) {
     return next(new ErrorResponse("Failed to update user", 500));
   }

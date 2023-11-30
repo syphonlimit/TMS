@@ -31,6 +31,12 @@ router.route("/updateUserEmail/").put(isAuthenticatedUser, updateUserEmail);
 router.route("/updateUserPassword/").put(isAuthenticatedUser, updateUserPassword);
 router.route("/getGroups").get(isAuthenticatedUser, getGroups);
 
+router.route("/getUserGroup").get(isAuthenticatedUser, async (req, res, next) => {
+  const token = req.token;
+  const result = await getUserGroup(token);
+  res.json(result);
+});
+
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
   const username = req.user.username;
   const group = req.body.group;
