@@ -68,7 +68,7 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
   //find user in database
   const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username]);
   if (row.length === 0) {
-    return next(new ErrorResponse("User not found", 401));
+    return next(new ErrorResponse("Invalid username or password", 401));
   }
   //get user from row
   const user = row[0];
@@ -186,7 +186,7 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
 
 // Get all users => /controller/getUsers
 exports.getUsers = catchAsyncErrors(async (req, res, next) => {
-  const [rows, fields] = await connection.promise().query("SELECT username,email,group_list,is_disabled FROM user where not username='root'");
+  const [rows, fields] = await connection.promise().query("SELECT username,email,group_list,is_disabled FROM user where not username='admin'");
   res.status(200).json({
     success: true,
     data: rows,
