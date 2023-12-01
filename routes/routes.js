@@ -16,7 +16,6 @@ const {
   updateUserPassword,
   createGroup,
   getGroups,
-  getUserGroup,
 } = require("../controllers/controllers");
 
 router.route("/login").post(loginUser);
