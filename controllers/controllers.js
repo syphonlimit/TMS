@@ -55,16 +55,6 @@ exports.checkLogin = catchAsyncErrors(async function (token) {
   return true;
 });
 
-//get user groups
-exports.getUserGroup = catchAsyncErrors(async function (token) {
-  let decoded;
-  decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-  const [row, fields] = await connection.promise().query("SELECT group_list FROM user WHERE username = ?", [decoded.username]);
-  const groups = row[0];
-  return groups;
-});
-
 // Login a user => /login
 exports.loginUser = catchAsyncErrors(async (req, res, next) => {
   //get username and password from request body
@@ -156,7 +146,7 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Create a group => /groupController/createGroup
+// Create a group => /controller/createGroup
 exports.createGroup = catchAsyncErrors(async (req, res, next) => {
   //Check if user is authorized to create group
   const { group_name } = req.body;
@@ -194,16 +184,16 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Get all users => /userController/getUsers
+// Get all users => /controller/getUsers
 exports.getUsers = catchAsyncErrors(async (req, res, next) => {
-  const [rows, fields] = await connection.promise().query("SELECT username,email,group_list,is_disabled FROM user");
+  const [rows, fields] = await connection.promise().query("SELECT username,email,group_list,is_disabled FROM user where not username='root'");
   res.status(200).json({
     success: true,
     data: rows,
   });
 });
 
-// Get a user => /userController/getUser/:username
+// Get a user => /controller/getUser
 exports.getUser = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
   const [row, fields] = await connection.promise().query("SELECT username,email,group_list FROM user WHERE username = ?", [username]);
@@ -216,7 +206,7 @@ exports.getUser = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Toggle user status => /userController/toggleUserStatus/:username
+// Toggle user status => /controller/toggleUserStatus/:username
 exports.toggleUserStatus = catchAsyncErrors(async (req, res, next) => {
   const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [req.params.username]);
   if (row.length === 0) {
@@ -237,7 +227,7 @@ exports.toggleUserStatus = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Update a user (admin) => /userController/updateUser/:username
+// Update a user (admin) => /controller/updateUser/:username
 exports.updateUser = catchAsyncErrors(async (req, res, next) => {
   const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [req.params.username]);
   if (row.length === 0) {
@@ -246,7 +236,7 @@ exports.updateUser = catchAsyncErrors(async (req, res, next) => {
   const user = row[0];
   //We need to check for password constraint, minimum character is 8 and maximum character is 10. It should include alphanumeric, number and special character. We do not care baout uppercase and lowercase.
   const passwordRegex = /^(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,10}$/;
-  if (!passwordRegex.test(req.body.password)) {
+  if (req.body.password && !passwordRegex.test(req.body.password)) {
     return next(new ErrorResponse("Password must be 8-10 characters long, contain at least one number, one letter and one special character", 400));
   }
 
@@ -292,7 +282,7 @@ exports.updateUser = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Update user email (user) => /userController/updateUserEmail/:username
+// Update user email (user) => /controller/updateUserEmail/:username
 exports.updateUserEmail = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
   const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username]);
@@ -312,7 +302,7 @@ exports.updateUserEmail = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Update user password (user) => /userController/updateUserPassword/:username
+// Update user password (user) => /controller/updateUserPassword/:username
 exports.updateUserPassword = catchAsyncErrors(async (req, res, next) => {
   const username = req.user.username;
   const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [username]);
@@ -367,8 +357,7 @@ const sendToken = (user, statusCode, res) => {
   res.status(statusCode).cookie("token", token, options).json({
     success: true,
     token,
-    group_list: user.group_list,
-    username: user.username,
+    expire: process.env.COOKIE_EXPIRES_TIME,
   });
 };
 
