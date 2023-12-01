@@ -20,20 +20,20 @@ exports.isAuthenticatedUser = catchAsyncErrors(async (req, res, next) => {
   }
   //Checks if token exists or is null
   if (token === "null" || !token) {
-    return next(new ErrorHandler("Login first to access this resource.", 401));
+    return next(new ErrorHandler("Not Logged In", 401));
   }
   let decoded;
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
-    return next(new ErrorHandler("Login first to access this resource.", 401));
+    return next(new ErrorHandler("Not Logged In", 401));
   }
   const [row, fields] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [decoded.username]);
   req.user = row[0];
   req.token = token;
 
   if (req.user.is_disabled === 1) {
-    return next(new ErrorHandler("User is disabled", 401));
+    return next(new ErrorHandler("Unauthorized User", 401));
   }
   next();
 });
@@ -46,7 +46,7 @@ exports.authorizeRoles = (...roles) => {
     //if any of the user's groups is included in the roles array, then the user is authorized
     authorised = req.user.group_list.some((r) => roles.includes(r));
     if (!authorised) {
-      return next(new ErrorHandler(`Role (${req.user.group_list}) is not allowed to access this resource`, 403));
+      return next(new ErrorHandler("Unauthorized User", 401));
     }
     next();
   };

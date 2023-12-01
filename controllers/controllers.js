@@ -148,7 +148,6 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
 
 // Create a group => /controller/createGroup
 exports.createGroup = catchAsyncErrors(async (req, res, next) => {
-  //Check if user is authorized to create group
   const { group_name } = req.body;
 
   //split group_name by comma
@@ -172,7 +171,6 @@ exports.createGroup = catchAsyncErrors(async (req, res, next) => {
   for (let i = 0; i < group_name_list.length; i++) {
     const result = await connection.promise().execute("INSERT INTO usergroups (group_name) VALUES (?)", [group_name_list[i]]);
 
-    //@TODO:
     if (result[0].affectedRows === 0) {
       return next(new ErrorResponse("Failed to create group", 500));
     }
