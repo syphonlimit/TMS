@@ -90,12 +90,6 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
 
 // Logout a user => /_logout
 exports.logout = catchAsyncErrors(async (req, res, next) => {
-  //Set cookie to null so that it will expire and user will not be able to access protected routes
-  res.cookie("token", null, {
-    expires: new Date(Date.now()),
-    httpOnly: true,
-  });
-
   //Send response
   res.status(200).json({
     success: true,
