@@ -62,7 +62,7 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
 
   //check if username and password is provided
   if (!username || !password) {
-    return next(new ErrorResponse("Please provide a username and password", 400));
+    return next(new ErrorResponse("Invalid username or password", 400));
   }
 
   //find user in database
@@ -81,7 +81,7 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
 
   //Check if user is disabled
   if (user.is_disabled === 1) {
-    return next(new ErrorResponse("User is disabled", 401));
+    return next(new ErrorResponse("Invalid username or password", 401));
   }
 
   //Send token
