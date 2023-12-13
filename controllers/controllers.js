@@ -332,6 +332,221 @@ exports.getGroups = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+//Create Application => /controller/createApp
+exports.createApp = catchAsyncErrors(async (req, res, next) => {
+  const { application, description, rNum, startDate, endDate, permOpen, permToDo, permDoing, permDone, permCreate } = req.body;
+
+  if (req.body.application === "" || null) {
+    return next(new ErrorResponse("Please enter input for the App name", 400));
+  }
+
+  if (req.body.rNum === "" || null) {
+    return next(new ErrorResponse("Please enter input for the App rNumber", 400));
+  }
+
+  //rNum constraint check
+  const rNumRegex = /^[0-9]+$/;
+  if (!rNumRegex.test(req.body.rNum)) {
+    return next(new ErrorResponse("Rnumber can only be a postive integer", 400));
+  }
+
+  if (req.body.description === "" || null) {
+    return next(new ErrorResponse("Please enter description for the App", 400));
+  }
+
+  let result;
+  try {
+    result = await connection
+      .promise()
+      .execute(
+        "INSERT INTO application (App_Acronym, App_startDate, App_endDate, App_Rnumber, App_Description, App_permit_create, App_permit_Open, App_permit_toDoList, App_permit_Doing, App_permit_Done) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [application, startDate, endDate, rNum, description, permCreate, permOpen, permToDo, permDoing, permDone]
+      );
+  } catch (error) {
+    //check duplicate entry
+    if (error.code === "ER_DUP_ENTRY") {
+      return next(new ErrorResponse("Appname already exists", 400));
+    }
+  }
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to create app", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "App created successfully",
+  });
+});
+
+// Get all apps => /controller/getApps
+exports.getApps = catchAsyncErrors(async (req, res, next) => {
+  const [rows, fields] = await connection
+    .promise()
+    .query(
+      "SELECT App_Acronym, App_startDate, App_endDate, App_Rnumber, App_Description, App_permit_create, App_permit_Open, App_permit_toDoList, App_permit_Doing, App_permit_Done FROM application"
+    );
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+
+//Update App details => /controller/updateApp/:appname
+exports.updateApp = catchAsyncErrors(async (req, res, next) => {
+  const [row, fields] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym = ?", [req.params.appname]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("App not found", 404));
+  }
+  const app = row[0];
+
+  //the fields are optional to update, so we need to build the query dynamically
+  let query = "UPDATE application SET ";
+  let values = [];
+  //Updatable fields are start/end dates, description, App permissions.
+  if (req.body.startDate) {
+    query += "App_startDate = ?, ";
+    values.push(req.body.startDate);
+  } else if (req.body.startDate === undefined) {
+    query += "App_startDate = ?, ";
+    values.push(null);
+  }
+  if (req.body.endDate) {
+    query += "App_endDate = ?, ";
+    values.push(req.body.endDate);
+  } else if (req.body.endDate === undefined) {
+    query += "App_endDate = ?, ";
+    values.push(null);
+  }
+  if (req.body.description) {
+    query += "App_Description = ?, ";
+    values.push(req.body.description);
+  } else if (req.body.description === undefined) {
+    query += "App_Description = ?, ";
+    values.push("");
+  }
+  if (req.body.permCreate) {
+    query += "App_permit_create = ?, ";
+    values.push(req.body.permCreate);
+  }
+  if (req.body.permOpen) {
+    query += "App_permit_Open = ?, ";
+    values.push(req.body.permOpen);
+  }
+  if (req.body.permToDo) {
+    query += "App_permit_toDoList = ?, ";
+    values.push(req.body.permToDo);
+  }
+  if (req.body.permDoing) {
+    query += "App_permit_Doing = ?, ";
+    values.push(req.body.permDoing);
+  }
+  if (req.body.permDone) {
+    query += "App_permit_Done = ?, ";
+    values.push(req.body.permDone);
+  }
+  //group can be empty, if it is empty we should update the permission to empty
+  if (req.body.permCreate === "") {
+    query += "App_permit_create = ?, ";
+    values.push("");
+  }
+  if (req.body.permOpen === "") {
+    query += "App_permit_Open = ?, ";
+    values.push("");
+  }
+  if (req.body.permToDo === "") {
+    query += "App_permit_toDoList = ?, ";
+    values.push("");
+  }
+  if (req.body.permDoing === "") {
+    query += "App_permit_Doing = ?, ";
+    values.push("");
+  }
+  if (req.body.permDone === "") {
+    query += "App_permit_Done = ?, ";
+    values.push("");
+  }
+  //remove the last comma and space
+  query = query.slice(0, -2);
+  //add the where clause
+  query += " WHERE App_Acronym = ?";
+  values.push(req.params.appname);
+  const result = await connection.promise().execute(query, values);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to update app", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "App updated successfully",
+  });
+});
+
+//Create Plan => /controller/createPlan
+exports.createPlan = catchAsyncErrors(async (req, res, next) => {
+  const { Plan_MVP_name, Plan_startDate, Plan_endDate, Plan_app_Acronym } = req.body;
+
+  if (req.body.Plan_MVP_name === "" || null) {
+    return next(new ErrorResponse("Please enter input for the Plan name", 400));
+  }
+
+  let result;
+  try {
+    result = await connection
+      .promise()
+      .execute("INSERT INTO plan (Plan_MVP_name, Plan_startDate, Plan_endDate, Plan_app_Acronym) VALUES (?,?,?,?)", [
+        Plan_MVP_name,
+        Plan_startDate,
+        Plan_endDate,
+        Plan_app_Acronym,
+      ]);
+  } catch (error) {
+    //check duplicate entry
+    if (error.code === "ER_DUP_ENTRY") {
+      return next(new ErrorResponse("Plan name already exists", 400));
+    }
+  }
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to create plan", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Plan created successfully",
+  });
+});
+
+//Create Task => /controller/createTask
+exports.createTask = catchAsyncErrors(async (req, res, next) => {
+  const { Task_name, Task_description, Task_notes, Task_id, Task_plan, Task_app_Acronym, Task_state, Task_creator, Task_owner } = req.body;
+
+  if (req.body.Task_name === "" || null) {
+    return next(new ErrorResponse("Please enter input for the Task name", 400));
+  }
+
+  let result;
+  try {
+    result = await connection
+      .promise()
+      .execute(
+        "INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_plan, Task_app_Acronym, Task_state, Task_creator, Task_owner) VALUES (?,?,?,?,?,?,?,?,?)",
+        [Task_name, Task_description, Task_notes, Task_id, Task_plan, Task_app_Acronym, Task_state, Task_creator, Task_owner]
+      );
+  } catch (error) {
+    //check duplicate entry
+    if (error.code === "ER_DUP_ENTRY") {
+      return next(new ErrorResponse("Task name already exists", 400));
+    }
+  }
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to create Task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task created successfully",
+  });
+});
+
 // Create and send token and save in cookie
 const sendToken = (user, statusCode, res) => {
   // Create JWT Token
