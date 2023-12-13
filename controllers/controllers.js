@@ -517,24 +517,38 @@ exports.createPlan = catchAsyncErrors(async (req, res, next) => {
 
 //Create Task => /controller/createTask
 exports.createTask = catchAsyncErrors(async (req, res, next) => {
-  const { Task_name, Task_description, Task_notes, Task_id, Task_plan, Task_app_Acronym, Task_state, Task_creator, Task_owner } = req.body;
-
-  if (req.body.Task_name === "" || null) {
+  const { name, description, acronym } = req.body;
+  const token = req.token;
+  if (req.body.name === "" || null) {
     return next(new ErrorResponse("Please enter input for the Task name", 400));
   }
 
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return false;
+  }
+
+  let notes = decoded.username + " Open " + Date.now();
+  let rnum = await connection.promise().execute("SELECT App_Rnumber FROM application where App_Acronym = ?", [acronym]);
+  let rnumber = rnum[0][0].App_Rnumber + 1;
+  let Task_id = acronym + rnumber;
   let result;
   try {
     result = await connection
       .promise()
       .execute(
-        "INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_plan, Task_app_Acronym, Task_state, Task_creator, Task_owner) VALUES (?,?,?,?,?,?,?,?,?)",
-        [Task_name, Task_description, Task_notes, Task_id, Task_plan, Task_app_Acronym, Task_state, Task_creator, Task_owner]
+        "INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_app_Acronym, Task_state, Task_creator, Task_owner) VALUES (?,?,?,?,?,?,?,?)",
+        [name, description, notes, Task_id, acronym, "open", decoded.username, decoded.username]
       );
+    updateRnum = await connection.promise().execute("UPDATE application SET App_Rnumber = ? where App_Acronym = ?", [rnumber, acronym]);
   } catch (error) {
     //check duplicate entry
     if (error.code === "ER_DUP_ENTRY") {
       return next(new ErrorResponse("Task name already exists", 400));
+    } else {
+      return next(new ErrorResponse("Task failed", 400));
     }
   }
   if (result[0].affectedRows === 0) {
