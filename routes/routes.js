@@ -40,7 +40,7 @@ router.route("/getApps").get(isAuthenticatedUser, getApps);
 router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), createApp);
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
 router.route("/createPlan").post(isAuthenticatedUser, authorizeRoles("PM"), createPlan);
-router.route("/createTask").post(isAuthenticatedUser, createTask, authorizeRoles("PL"));
+router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), createTask);
 
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
   const username = req.user.username;

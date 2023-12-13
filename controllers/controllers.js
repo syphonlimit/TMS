@@ -483,9 +483,9 @@ exports.updateApp = catchAsyncErrors(async (req, res, next) => {
 
 //Create Plan => /controller/createPlan
 exports.createPlan = catchAsyncErrors(async (req, res, next) => {
-  const { Plan_MVP_name, Plan_startDate, Plan_endDate, Plan_app_Acronym } = req.body;
+  const { plan, startDate, endDate, colors, acronym } = req.body;
 
-  if (req.body.Plan_MVP_name === "" || null) {
+  if (req.body.plan === "" || null) {
     return next(new ErrorResponse("Please enter input for the Plan name", 400));
   }
 
@@ -493,11 +493,12 @@ exports.createPlan = catchAsyncErrors(async (req, res, next) => {
   try {
     result = await connection
       .promise()
-      .execute("INSERT INTO plan (Plan_MVP_name, Plan_startDate, Plan_endDate, Plan_app_Acronym) VALUES (?,?,?,?)", [
-        Plan_MVP_name,
-        Plan_startDate,
-        Plan_endDate,
-        Plan_app_Acronym,
+      .execute("INSERT INTO plan (Plan_MVP_name, Plan_startDate, Plan_endDate, Plan_app_Acronym, Plan_color) VALUES (?,?,?,?,?)", [
+        plan,
+        startDate,
+        endDate,
+        acronym,
+        colors,
       ]);
   } catch (error) {
     //check duplicate entry
