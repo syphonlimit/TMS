@@ -481,6 +481,18 @@ exports.updateApp = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// Get all plans by plan name => /controller/getPlans
+exports.getPlans = catchAsyncErrors(async (req, res, next) => {
+  const { Plan_app_Acronym } = req.body;
+  const [rows, fields] = await connection
+    .promise()
+    .query("SELECT Plan_MVP_name, Plan_startDate, Plan_endDate, Plan_color FROM plan where Plan_app_Acronym =?", [Plan_app_Acronym]);
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+
 //Create Plan => /controller/createPlan
 exports.createPlan = catchAsyncErrors(async (req, res, next) => {
   const { plan, startDate, endDate, colors, acronym } = req.body;

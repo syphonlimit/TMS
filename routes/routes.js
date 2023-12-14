@@ -21,6 +21,7 @@ const {
   createTask,
   getApps,
   updateApp,
+  getPlans,
 } = require("../controllers/controllers");
 
 router.route("/login").post(loginUser);
@@ -39,6 +40,7 @@ router.route("/getGroups").get(isAuthenticatedUser, getGroups);
 router.route("/getApps").get(isAuthenticatedUser, getApps);
 router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), createApp);
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
+router.route("/getPlans").post(isAuthenticatedUser, authorizeRoles("PM"), getPlans);
 router.route("/createPlan").post(isAuthenticatedUser, authorizeRoles("PM"), createPlan);
 router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), createTask);
 
