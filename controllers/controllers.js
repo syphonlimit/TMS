@@ -3,6 +3,7 @@ const ErrorResponse = require("../utils/errorHandler");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mysql = require("mysql2");
+const nodemailer = require("nodemailer");
 
 //Setting up database connection
 const connection = mysql.createConnection({
@@ -332,7 +333,63 @@ exports.getGroups = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-//Create Application => /controller/createApp
+// Create and send token and save in cookie
+const sendToken = (user, statusCode, res) => {
+  // Create JWT Token
+  const token = getJwtToken(user);
+  // Options for cookie
+  const options = {
+    expires: new Date(Date.now() + process.env.COOKIE_EXPIRES_TIME * 24 * 60 * 60 * 1000),
+    httpOnly: true,
+  };
+
+  // if(process.env.NODE_ENV === 'production ') {
+  //     options.secure = true;
+  // }
+
+  res.status(statusCode).cookie("token", token, options).json({
+    success: true,
+    token,
+    expire: process.env.COOKIE_EXPIRES_TIME,
+  });
+};
+
+const getJwtToken = (user) => {
+  return jwt.sign({ username: user.username }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_TIME,
+  });
+};
+
+//Assignment 2 code below
+/*
+* Create Application => /controller/createApp
+* This function will create an application and insert it into the database.
+* It will take in the following parameters:
+* - App_Acronym (string) => acronym of the application
+* - App_Description (string) => description of the application
+* - App_Rnumber (int) => R number of the application
+* - App_startDate (date), (optional) => start date of the application
+* - App_endDate (date), (optional) => end date of the application
+* - App_permit_Create (string), (optional) => permit create of the application
+* - App_permit_Open (string), (optional) => permit open of the application
+* - App_permit_toDoList (string), (optional) => permit toDoList of the application
+* - App_permit_Doing (string), (optional) => permit doing of the application
+* - App_permit_Done (string), (optional) => permit done of the application
+
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+* - message (string) => message to be displayed
+
+* It will throw the following errors:
+* - Invalid input (400) => if any of the required parameters are not provided
+* - Application already exists (400) => if the application already exists
+* - Failed to create application (500) => if failed to create application
+
+* It will also throw any other errors that are not caught
+
+* This function is only accessible by users with the following roles:
+* - admin
+*/
 exports.createApp = catchAsyncErrors(async (req, res, next) => {
   const { application, description, rNum, startDate, endDate, permOpen, permToDo, permDoing, permDone, permCreate } = req.body;
 
@@ -391,7 +448,33 @@ exports.getApps = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-//Update App details => /controller/updateApp/:appname
+/*
+* Update App details => /controller/updateApp/:appname
+* This function will update an application and insert it into the database.
+* It will take in the following parameters:
+* - App_Description (string), (optional) => description of the application
+* - App_startDate (date), (optional) => start date of the application
+* - App_endDate (date), (optional) => end date of the application
+* - App_permit_Create (string), (optional) => permit create of the application
+* - App_permit_Open (string), (optional) => permit open of the application
+* - App_permit_toDoList (string), (optional) => permit toDoList of the application
+* - App_permit_Doing (string), (optional) => permit doing of the application
+* - App_permit_Done (string), (optional) => permit done of the application
+
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+* - message (string) => message to be displayed
+
+* It will throw the following errors:
+* - Invalid input (400) => if any of the required parameters are not provided
+* - Application does not exist (404) => if the application does not exist
+* - Failed to update application (500) => if failed to update application
+
+* It will also throw any other errors that are not caught
+
+* This function is only accessible by users with the following roles:
+* - admin
+*/
 exports.updateApp = catchAsyncErrors(async (req, res, next) => {
   const [row, fields] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym = ?", [req.params.appname]);
   if (row.length === 0) {
@@ -493,6 +576,40 @@ exports.getPlans = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// Update plans by plan name => /controller/updatePlan
+exports.updatePlan = catchAsyncErrors(async (req, res, next) => {
+  const { planName, planAcronym, startDate, endDate } = req.body;
+
+  //Since all the parameters are optional, we need to build the query dynamically, if the parameter is not provided, we will not update it
+  let query = "UPDATE plan SET ";
+  let params = [];
+  if (startDate) {
+    query += "Plan_startDate = ?,";
+    params.push(startDate);
+  }
+  if (endDate) {
+    query += "Plan_endDate = ?,";
+    params.push(endDate);
+  }
+  //Remove the last comma
+  query = query.slice(0, -1);
+  //Add the WHERE clause
+  query += " WHERE Plan_app_Acronym = ? AND Plan_MVP_name = ?";
+  params.push(planAcronym);
+  params.push(planName);
+
+  //Update plan
+  const result = await connection.promise().execute(query, params);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to update plan", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Plan updated successfully",
+  });
+});
+
 //Create Plan => /controller/createPlan
 exports.createPlan = catchAsyncErrors(async (req, res, next) => {
   const { plan, startDate, endDate, colors, acronym } = req.body;
@@ -528,12 +645,45 @@ exports.createPlan = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-//Create Task => /controller/createTask
+/*
+* Create Task => /controller/createTask
+* This function will create a task and insert it into the database.
+* It will take in the following parameters:
+* - Task_name (string) => name of the task
+* - Task_description (string), (optional) => description of the task
+* - Task_notes (string), (optional) => notes of the task
+* - Task_id (string), (generated) => id of the task, this is the primary key. This is a combination of the application acronym and the application R number. 
+    Take in App_Acronym as a parameter and get the R number from the application table then generate the Task_id
+* - Task_app_acronym (string), (generated) => acronym of the application that the task belongs to
+* - Task_state (string), (generated) => state of the task, default to open.
+* - Task_creator (string), (generated) => creator of the task, default to current user's username
+* - Task_owner (string), (generated) => owner of the task, default to current user's username
+* - Task_createDate (date), (generated) => create date of the task, default to current date
+ 
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+* - message (string) => message to be displayed
+
+* It will throw the following errors:
+* - Invalid input (400) => if any of the required parameters are not provided
+* - Failed to create task (500) => if failed to create task
+
+* It will also throw any other errors that are not caught
+
+* This function is only accessible by users with the following roles:
+* - admin
+* - projectlead
+*/
 exports.createTask = catchAsyncErrors(async (req, res, next) => {
   const { name, description, acronym } = req.body;
   const token = req.token;
   if (req.body.name === "" || null) {
     return next(new ErrorResponse("Please enter input for the Task name", 400));
+  }
+
+  //We need to handle the optional parameters, if they are not provided, we will set them to null
+  if (!description) {
+    description = null;
   }
 
   let decoded;
@@ -543,7 +693,13 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
     return false;
   }
 
-  let notes = decoded.username + " Open " + Date.now();
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  let notes = "Opened by " + decoded.username + " on " + formattedDate;
   let rnum = await connection.promise().execute("SELECT App_Rnumber FROM application where App_Acronym = ?", [acronym]);
   let rnumber = rnum[0][0].App_Rnumber + 1;
   let Task_id = acronym + rnumber;
@@ -553,15 +709,16 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
       .promise()
       .execute(
         "INSERT INTO task (Task_name, Task_description, Task_notes, Task_id, Task_app_Acronym, Task_state, Task_creator, Task_owner) VALUES (?,?,?,?,?,?,?,?)",
-        [name, description, notes, Task_id, acronym, "open", decoded.username, decoded.username]
+        [name, description, notes, Task_id, acronym, "Open", decoded.username, decoded.username]
       );
+    //Update the increment of the rnumber in application table
     updateRnum = await connection.promise().execute("UPDATE application SET App_Rnumber = ? where App_Acronym = ?", [rnumber, acronym]);
   } catch (error) {
     //check duplicate entry
     if (error.code === "ER_DUP_ENTRY") {
       return next(new ErrorResponse("Task name already exists", 400));
     } else {
-      return next(new ErrorResponse("Task failed", 400));
+      return next(new ErrorResponse("Failed to create Task", 400));
     }
   }
   if (result[0].affectedRows === 0) {
@@ -574,29 +731,152 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Create and send token and save in cookie
-const sendToken = (user, statusCode, res) => {
-  // Create JWT Token
-  const token = getJwtToken(user);
-  // Options for cookie
-  const options = {
-    expires: new Date(Date.now() + process.env.COOKIE_EXPIRES_TIME * 24 * 60 * 60 * 1000),
-    httpOnly: true,
-  };
+/*
+* Get all tasks by app => /controller/getAllTask
+* This function will get all tasks from the database that belongs to an application.
+* It will take in the following parameters:
+* - App_Acronym (string) => acronym of the application
 
-  // if(process.env.NODE_ENV === 'production ') {
-  //     options.secure = true;
-  // }
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+* - data (array) => the tasks array
 
-  res.status(statusCode).cookie("token", token, options).json({
+* It will throw the following errors:
+* - No tasks found (404) => if no tasks are found
+* - Application does not exist (404) => if the application does not exist
+
+* It will also throw any other errors that are not caught
+*/
+exports.getAllTask = catchAsyncErrors(async (req, res, next) => {
+  const { acronym } = req.body;
+  const [row, fields] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym = ?", [acronym]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Application does not exist", 404));
+  }
+  const [rows, fields2] = await connection
+    .promise()
+    .query(
+      "SELECT task.*, plan.Plan_color FROM task LEFT JOIN plan ON task.Task_plan = plan.Plan_MVP_name AND task.Task_app_Acronym = plan.Plan_app_Acronym WHERE Task_app_Acronym = ?",
+      [acronym]
+    );
+  res.status(200).json({
     success: true,
-    token,
-    expire: process.env.COOKIE_EXPIRES_TIME,
+    data: rows,
   });
-};
+});
 
-const getJwtToken = (user) => {
-  return jwt.sign({ username: user.username }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_TIME,
+// Get task by task id=> /controller/getTask/: taskId
+exports.getTask = catchAsyncErrors(async (req, res, next) => {
+  const { taskId } = req.body;
+  const [rows, fields] = await connection.promise().query("SELECT * FROM task where Task_id =?", [taskId]);
+  if (rows.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+  res.status(200).json({
+    success: true,
+    data: rows,
   });
-};
+});
+
+// Update tasknotes by taskid => /controller/updateTasknotes/: taskid
+exports.updateTasknotes = catchAsyncErrors(async (req, res, next) => {
+  const [row, fields] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [req.params.taskId]);
+  const token = req.token;
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return false;
+  }
+
+  //We should append the notes to the existing notes, so we need to get the existing notes first
+  const existing_notes = row[0].Task_notes;
+  //Append the existing notes with the new notes
+  req.body.note = req.body.note + " by " + decoded.username + " " + formattedDate + "\n\n" + existing_notes;
+
+  //Update notes
+  const result = await connection.promise().execute("UPDATE task SET Task_notes = ? WHERE Task_id = ?", [req.body.note, req.params.taskId]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to update notes", 500));
+  }
+  updateOwner = await connection.promise().execute("UPDATE task SET Task_owner = ? WHERE Task_id = ?", [decoded.username, req.params.taskId]);
+  res.status(200).json({
+    success: true,
+    message: "Task notes updated successfully",
+  });
+});
+
+//assignTaskToPlan => /controller/assignTaskToPlan/:task_id
+exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
+  //Check if user is authorized to assign plan to task
+  const { acronym, plan } = req.body;
+  const Task_id = req.params.taskId;
+  const token = req.token;
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const [row, fields] = await connection.promise().query("SELECT * FROM plan WHERE Plan_app_Acronym = ? AND Plan_MVP_name = ?", [acronym, plan]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Plan does not exist", 404));
+  }
+
+  //Check if task exists
+  const [row2, fields2] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row2.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if application exists
+  const [row3, fields3] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym = ?", [acronym]);
+  if (row3.length === 0) {
+    return next(new ErrorResponse("Application does not exist", 404));
+  }
+
+  //Check if any of the required parameters are not provided
+  if (!acronym || !plan) {
+    return next(new ErrorResponse("Invalid input", 400));
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return false;
+  }
+  //Get the Task_owner from the req.user.username
+  const Task_owner = decoded.username;
+  let Added_Task_notes;
+  if (req.body.note === undefined || req.body.note === null || req.body.note === "") {
+    //append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
+    Added_Task_notes = Task_owner + " assigned " + row2[0].Task_name + " to " + plan + " " + formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
+    Added_Task_notes = Task_owner + " assigned " + row2[0].Task_name + " to " + plan + "\n" + req.body.note + " " + formattedDate;
+  }
+
+  //Append Task_notes to the preexisting Task_notes
+  const Task_notes = Added_Task_notes + "\n\n" + row2[0].Task_notes;
+
+  //Update the task including the task_owner
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ?, Task_plan = ?, Task_owner = ? WHERE Task_id = ?", [Task_notes, plan, Task_owner, Task_id]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to assign plan to task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Plan assigned to task successfully",
+  });
+});

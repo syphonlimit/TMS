@@ -22,6 +22,11 @@ const {
   getApps,
   updateApp,
   getPlans,
+  updatePlan,
+  getTask,
+  updateTasknotes,
+  getAllTask,
+  assignTaskToPlan,
 } = require("../controllers/controllers");
 
 router.route("/login").post(loginUser);
@@ -37,12 +42,22 @@ router.route("/updateUserEmail/").put(isAuthenticatedUser, updateUserEmail);
 router.route("/updateUserPassword/").put(isAuthenticatedUser, updateUserPassword);
 router.route("/getGroups").get(isAuthenticatedUser, getGroups);
 
+//Application
 router.route("/getApps").get(isAuthenticatedUser, getApps);
 router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), createApp);
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
+
+//Plans
 router.route("/getPlans").post(isAuthenticatedUser, authorizeRoles("PM"), getPlans);
+router.route("/updatePlan").post(isAuthenticatedUser, authorizeRoles("PM"), updatePlan);
 router.route("/createPlan").post(isAuthenticatedUser, authorizeRoles("PM"), createPlan);
+
+//Tasks
 router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), createTask);
+router.route("/getTask").post(isAuthenticatedUser, getTask);
+router.route("/getAllTask").post(isAuthenticatedUser, getAllTask);
+router.route("/updateTasknotes/:taskId").post(isAuthenticatedUser, updateTasknotes);
+router.route("/assignTaskToPlan/:taskId").post(isAuthenticatedUser, authorizeRoles("PL"), assignTaskToPlan);
 
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
   const username = req.user.username;
