@@ -27,6 +27,10 @@ const {
   updateTasknotes,
   getAllTask,
   assignTaskToPlan,
+  getApp,
+  returnTask,
+  promoteTask,
+  rejectTask,
 } = require("../controllers/controllers");
 
 router.route("/login").post(loginUser);
@@ -43,6 +47,7 @@ router.route("/updateUserPassword/").put(isAuthenticatedUser, updateUserPassword
 router.route("/getGroups").get(isAuthenticatedUser, getGroups);
 
 //Application
+router.route("/getApp").post(isAuthenticatedUser, getApp);
 router.route("/getApps").get(isAuthenticatedUser, getApps);
 router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), createApp);
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
@@ -57,7 +62,10 @@ router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), crea
 router.route("/getTask").post(isAuthenticatedUser, getTask);
 router.route("/getAllTask").post(isAuthenticatedUser, getAllTask);
 router.route("/updateTasknotes/:taskId").post(isAuthenticatedUser, updateTasknotes);
-router.route("/assignTaskToPlan/:taskId").post(isAuthenticatedUser, authorizeRoles("PL"), assignTaskToPlan);
+router.route("/assignTaskToPlan/:taskId").post(isAuthenticatedUser, authorizeRoles("PL" || "PM"), assignTaskToPlan);
+router.route("/promoteTask/:Task_id").put(isAuthenticatedUser, promoteTask); //Should be restricted to people with groups inside App_permit_Done
+router.route("/rejectTask/:Task_id").put(isAuthenticatedUser, rejectTask); //Should be restricted to people with groups inside App_permit_Done
+router.route("/returnTask/:Task_id").put(isAuthenticatedUser, returnTask); //Should be restricted to people with groups inside App_permit_Doing
 
 router.route("/checkGroup").post(isAuthenticatedUser, async (req, res, next) => {
   const username = req.user.username;

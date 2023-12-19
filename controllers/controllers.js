@@ -448,6 +448,15 @@ exports.getApps = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// Get a specific app => /controller/getApp
+exports.getApp = catchAsyncErrors(async (req, res, next) => {
+  const [rows, fields] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym =?", [req.body.acronym]);
+  res.status(200).json({
+    success: true,
+    data: rows,
+  });
+});
+
 /*
 * Update App details => /controller/updateApp/:appname
 * This function will update an application and insert it into the database.
@@ -564,7 +573,7 @@ exports.updateApp = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
-// Get all plans by plan name => /controller/getPlans
+// Get all plans by app name => /controller/getPlans
 exports.getPlans = catchAsyncErrors(async (req, res, next) => {
   const { Plan_app_Acronym } = req.body;
   const [rows, fields] = await connection
@@ -681,11 +690,6 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorResponse("Please enter input for the Task name", 400));
   }
 
-  //We need to handle the optional parameters, if they are not provided, we will set them to null
-  if (!description) {
-    description = null;
-  }
-
   let decoded;
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -694,11 +698,7 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
   }
 
   const date = new Date(Date.now());
-  const formattedDate = date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const formattedDate = date.toLocaleString();
   let notes = "Opened by " + decoded.username + " on " + formattedDate;
   let rnum = await connection.promise().execute("SELECT App_Rnumber FROM application where App_Acronym = ?", [acronym]);
   let rnumber = rnum[0][0].App_Rnumber + 1;
@@ -783,11 +783,7 @@ exports.updateTasknotes = catchAsyncErrors(async (req, res, next) => {
   const [row, fields] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [req.params.taskId]);
   const token = req.token;
   const date = new Date(Date.now());
-  const formattedDate = date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const formattedDate = date.toLocaleString();
 
   let decoded;
   try {
@@ -820,11 +816,7 @@ exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
   const Task_id = req.params.taskId;
   const token = req.token;
   const date = new Date(Date.now());
-  const formattedDate = date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const formattedDate = date.toLocaleString();
   const [row, fields] = await connection.promise().query("SELECT * FROM plan WHERE Plan_app_Acronym = ? AND Plan_MVP_name = ?", [acronym, plan]);
   if (row.length === 0) {
     return next(new ErrorResponse("Plan does not exist", 404));
@@ -878,5 +870,392 @@ exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
   res.status(200).json({
     success: true,
     message: "Plan assigned to task successfully",
+  });
+});
+
+/*
+* validatePermit => backend function to validate if the user is allowed to perform the action
+* This function will take in the following parameters:
+* - App_Acronym (string) => acronym of the application
+* - Task_state (string) => state of the task
+* - user (string) => username of the user
+
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+
+* It will throw the following errors:
+* - Application does not exist (404) => if the application does not exist
+* - Task does not exist (404) => if the task does not exist
+
+* It will also throw any other errors that are not caught
+*/
+const validatePermit = catchAsyncErrors(async (App_Acronym, Task_state, user) => {
+  //Check if application exists
+  const [row, fields] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym = ?", [App_Acronym]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Application does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const application = row[0];
+  //Depending on the state, access the permit of the application
+  let permit_state;
+  switch (Task_state) {
+    case "create":
+      permit_state = application.App_permit_create;
+      break;
+    case "Open":
+      permit_state = application.App_permit_Open;
+      break;
+    case "ToDo":
+      permit_state = application.App_permit_toDoList;
+      break;
+    case "Doing":
+      permit_state = application.App_permit_Doing;
+      break;
+    case "Done":
+      permit_state = application.App_permit_Done;
+      break;
+    default:
+      return next(new ErrorResponse("Invalid task state", 400));
+    //check permit if it is null
+  }
+  if (permit_state === null || permit_state === undefined) {
+    return false;
+  }
+
+  //Get user's groups
+  const [row2, fields3] = await connection.promise().query("SELECT * FROM user WHERE username = ?", [user]);
+  if (row2.length === 0) {
+    return next(new ErrorResponse("User does not exist", 404));
+  }
+
+  //Get the user's groups
+  const user_groups = row2[0].group_list.split(",");
+  //Check if any of the user's groups is included in the permit array, then the user is authorized. The group has to match exactly
+  //for each group in the group array, check match exact as group parameter
+  const authorised = user_groups.includes(permit_state);
+  //Since permit can only have one group, we just need to check if the user's groups contains the permit
+  if (!authorised) {
+    return false;
+  }
+  return true;
+});
+
+/*
+* returnTask => /controller/returnTask/:Task_id
+* This function will demote a task in the database and move it back to the ToDo state.
+* It will take in the following parameters:
+* - Task_notes (string) => notes of the task
+* - Task_owner (string) => owner of the task. This is the username of the user that made the request
+* - Task_state (string) => state of the task. This should be the current state of the task from the database
+* - Task_id (string) => id of the task
+
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+* - message (string) => message to be displayed
+
+* It will throw the following errors:
+* - Invalid input (400) => if any of the required parameters are not provided
+* - Task does not exist (404) => if the task does not exist
+* - You are not authorised (403) => if the user is not authorised to perform the action
+* - Failed to return task (500) => if failed to return task
+
+* It will also throw any other errors that are not caught
+
+* This function is accessible only by groups inside the permit of the task state.
+*/
+exports.returnTask = catchAsyncErrors(async (req, res, next) => {
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+
+  //Check if user is authorized to return task
+  const Task_id = req.params.Task_id;
+  const [row, fields] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const validate = await validatePermit(row[0].Task_app_Acronym, row[0].Task_state, req.user.username);
+  if (!validate) {
+    return next(new ErrorResponse("You are not authorised", 403));
+  }
+
+  //Get the current state of the task
+  const Task_state = row[0].Task_state;
+  //If the current state is not Doing, we cannot return the task
+  if (Task_state !== "Doing") {
+    return next(new ErrorResponse("You cannot return a task that is not Doing", 400));
+  }
+  //The state will always be ToDo when returning a task
+  const nextState = "ToDo";
+
+  //Get the Task_owner from the req.user.username
+  const Task_owner = req.user.username;
+  let Added_Task_notes;
+  if (req.body.Task_notes === undefined || null) {
+    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes = Task_owner + " moved " + row[0].Task_name + " from " + Task_state + " to " + nextState + " on " + formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner + " moved " + row[0].Task_name + " from " + Task_state + " to " + nextState + "\n" + req.body.Task_notes + " on " + formattedDate;
+  }
+
+  //Append Task_notes to the preexisting Task_notes
+  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+
+  //Update the task
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ? WHERE Task_id = ?", [Task_notes, nextState, Task_owner, Task_id]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to return task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task returned successfully",
+  });
+});
+
+/*
+* promoteTask => /controller/promoteTask/:Task_id
+* This function will approve a task in the database and move it to the next state.
+* It will take in the following parameters:
+* - Task_notes (string) => notes of the task
+* - Task_owner (string) => owner of the task. This is the username of the user that made the request
+* - Task_state (string) => state of the task. This should be the current state of the task from the database
+* - Task_id (string) => id of the task
+
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+* - message (string) => message to be displayed
+
+* It will throw the following errors:
+* - Invalid input (400) => if any of the required parameters are not provided
+* - Task does not exist (404) => if the task does not exist
+* - You are not authorised (403) => if the user is not authorised to perform the action
+* - Failed to promote task (500) => if failed to promote task
+* - You cannot promote a task that is Closed (400) => if the task is closed
+
+* It will also throw any other errors that are not caught
+
+* This function is accessible only by groups inside the permit of the task state.
+*/
+exports.promoteTask = catchAsyncErrors(async (req, res, next) => {
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+
+  const Task_id = req.params.Task_id;
+  const [row, fields] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const validate = await validatePermit(row[0].Task_app_Acronym, row[0].Task_state, req.user.username);
+  if (!validate) {
+    return next(new ErrorResponse("You are not authorised", 403));
+  }
+
+  //Get the current state of the task
+  const Task_state = row[0].Task_state;
+  //If the current state is Close, we cannot promote the task
+  if (Task_state === "Close") {
+    return next(new ErrorResponse("You cannot promote a task that is Closed", 400));
+  }
+  //Depending on the current state, we will update the state to the next state
+  let nextState;
+  switch (Task_state) {
+    case "Open":
+      nextState = "ToDo";
+      break;
+    case "ToDo":
+      nextState = "Doing";
+      break;
+    case "Doing":
+      nextState = "Done";
+      break;
+    case "Done":
+      nextState = "Close";
+      break;
+    default:
+      nextState = "Close";
+  }
+
+  //Get the Task_owner from the req.user.username
+  const Task_owner = req.user.username;
+
+  let Added_Task_notes;
+  if (req.body.Task_notes === undefined || req.body.Task_notes === null || req.body.Task_notes === "") {
+    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes = Task_owner + " moved " + row[0].Task_name + " from " + Task_state + " to " + nextState + " on " + formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner + " moved " + row[0].Task_name + " from " + Task_state + " to " + nextState + "\n" + req.body.Task_notes + " on " + formattedDate;
+  }
+
+  //Append Task_notes to the preexisting Task_notes, I want it to have two new lines between the old notes and the new notes
+  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+  //Update the task
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ? WHERE Task_id = ?", [Task_notes, nextState, Task_owner, Task_id]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to promote task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task promoted successfully",
+  });
+
+  if (Task_state === "Doing" && nextState === "Done") {
+    sendEmailToProjectLead(row[0].Task_name, Task_owner, row[0].Task_app_Acronym);
+  }
+});
+
+async function sendEmailToProjectLead(taskName, taskOwner, Task_app_acronym) {
+  //We need to pull the App_permit_Done group
+  const [row, fields] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym = ?", [Task_app_acronym]);
+
+  const group = row[0].App_permit_Done;
+
+  //We need to pull the emails of all users
+  const [row2, fields2] = await connection.promise().query("SELECT * FROM user");
+  const users = row2;
+
+  //We need to pull the emails of all users that are in the group
+  let emails = [];
+  for (let i = 0; i < users.length; i++) {
+    const user = users[i];
+    const user_groups = user.group_list.split(",");
+    if (user_groups.includes(group)) {
+      //check if email is null or undefined
+      if (user.email !== null && user.email !== undefined) {
+        emails.push(user.email);
+      }
+    }
+  }
+
+  // Set up transporter
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  // Define mail options
+  const mailOptions = {
+    from: `${process.env.SMTP_FROM_NAME} <${process.env.SMTP_FROM_EMAIL}>`,
+    to: emails, // Replace with the actual project lead's email
+    subject: `Task Promotion Notification`,
+    text: `The task "${taskName}" has been promoted to "Done" by ${taskOwner}.`,
+  };
+
+  // Send the email
+  try {
+    //await transporter.sendMail(mailOptions);
+    console.log("Email sent successfully.");
+  } catch (error) {
+    console.error("Failed to send email:", error);
+  }
+}
+
+/*
+* rejectTask => /controller/rejectTask/:Task_id
+* This function will reject a task in the database and move it back to the Doing state.
+* It will take in the following parameters:
+* - Task_notes (string) => notes of the task
+* - Task_owner (string) => owner of the task. This is the username of the user that made the request
+* - Task_state (string) => state of the task. This should be the current state of the task from the database
+* - Task_id (string) => id of the task
+* - Task_plan (string) => plan of the task.
+
+* It will return the following:
+* - success (boolean) => true if successful, false if not
+* - message (string) => message to be displayed
+
+* It will throw the following errors:
+* - Invalid input (400) => if any of the required parameters are not provided
+* - Task does not exist (404) => if the task does not exist
+* - You are not authorised (403) => if the user is not authorised to perform the action
+* - Failed to reject task (500) => if failed to reject task
+
+* It will also throw any other errors that are not caught
+
+* This function is accessible only by groups inside the permit of the task state.
+*/
+exports.rejectTask = catchAsyncErrors(async (req, res, next) => {
+  const date = new Date(Date.now());
+  const formattedDate = date.toLocaleString();
+
+  const Task_id = req.params.Task_id;
+  const [row, fields] = await connection.promise().query("SELECT * FROM task WHERE Task_id = ?", [Task_id]);
+  if (row.length === 0) {
+    return next(new ErrorResponse("Task does not exist", 404));
+  }
+
+  //Check if user is allowed to perform the action
+  const validate = await validatePermit(row[0].Task_app_Acronym, row[0].Task_state, req.user.username);
+  if (!validate) {
+    return next(new ErrorResponse("You are not authorised", 403));
+  }
+
+  //Get the current state of the task
+  const Task_state = row[0].Task_state;
+  //If the current state is not Done, we cannot reject the task
+  if (Task_state !== "Done") {
+    return next(new ErrorResponse("You cannot reject a task that is not Done", 400));
+  }
+  //The state will always be Doing when rejecting a task
+  const nextState = "Doing";
+
+  //Get the Task_owner from the req.user.username
+  const Task_owner = req.user.username;
+  let Added_Task_notes;
+  if (req.body.Task_notes === undefined || null) {
+    //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes = Task_owner + " moved " + row[0].Task_name + " from " + Task_state + " to " + nextState + " on " + formattedDate;
+  } else {
+    //Get the Task_notes from the req.body.Task_notes and append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
+    Added_Task_notes =
+      Task_owner + " moved " + row[0].Task_name + " from " + Task_state + " to " + nextState + "\n" + req.body.Task_notes + " on " + formattedDate;
+  }
+
+  //Append Task_notes to the preexisting Task_notes
+  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+
+  //Task_plan can be updated if it is provided
+  let Task_plan;
+  if (req.body.Task_plan === undefined || null) {
+    Task_plan = row[0].Task_plan;
+  } else {
+    Task_plan = req.body.Task_plan;
+  }
+
+  //Update the task
+  const result = await connection
+    .promise()
+    .execute("UPDATE task SET Task_notes = ?, Task_state = ?, Task_owner = ?, Task_plan = ? WHERE Task_id = ?", [
+      Task_notes,
+      nextState,
+      Task_owner,
+      Task_plan,
+      Task_id,
+    ]);
+  if (result[0].affectedRows === 0) {
+    return next(new ErrorResponse("Failed to reject task", 500));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Task rejected successfully",
   });
 });
