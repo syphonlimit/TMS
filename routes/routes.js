@@ -53,7 +53,7 @@ router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), creat
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
 
 //Plans
-router.route("/getPlans").post(isAuthenticatedUser, authorizeRoles("PM"), getPlans);
+router.route("/getPlans").post(isAuthenticatedUser, authorizeRoles("PM", "PL"), getPlans);
 router.route("/updatePlan").post(isAuthenticatedUser, authorizeRoles("PM"), updatePlan);
 router.route("/createPlan").post(isAuthenticatedUser, authorizeRoles("PM"), createPlan);
 
@@ -62,7 +62,7 @@ router.route("/createTask").post(isAuthenticatedUser, authorizeRoles("PL"), crea
 router.route("/getTask").post(isAuthenticatedUser, getTask);
 router.route("/getAllTask").post(isAuthenticatedUser, getAllTask);
 router.route("/updateTasknotes/:taskId").post(isAuthenticatedUser, updateTasknotes);
-router.route("/assignTaskToPlan/:taskId").post(isAuthenticatedUser, authorizeRoles("PL" || "PM"), assignTaskToPlan);
+router.route("/assignTaskToPlan/:taskId").post(isAuthenticatedUser, authorizeRoles("PL", "PM"), assignTaskToPlan);
 router.route("/promoteTask/:Task_id").put(isAuthenticatedUser, promoteTask); //Should be restricted to people with groups inside App_permit_Done
 router.route("/rejectTask/:Task_id").put(isAuthenticatedUser, rejectTask); //Should be restricted to people with groups inside App_permit_Done
 router.route("/returnTask/:Task_id").put(isAuthenticatedUser, returnTask); //Should be restricted to people with groups inside App_permit_Doing

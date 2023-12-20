@@ -994,7 +994,7 @@ exports.returnTask = catchAsyncErrors(async (req, res, next) => {
   //Get the Task_owner from the req.user.username
   const Task_owner = req.user.username;
   let Added_Task_notes;
-  if (req.body.Task_notes === undefined || null) {
+  if (req.body.Task_notes === undefined || req.body.Task_notes === null || req.body.Task_notes === "") {
     //append {Task_owner} moved {Task_name} from {Task_state} to {nextState} to the end of Task_note
     Added_Task_notes = Task_owner + " moved " + row[0].Task_name + " from " + Task_state + " to " + nextState + " on " + formattedDate;
   } else {
@@ -1161,7 +1161,7 @@ async function sendEmailToProjectLead(taskName, taskOwner, Task_app_acronym) {
 
   // Send the email
   try {
-    //await transporter.sendMail(mailOptions);
+    //transporter.sendMail(mailOptions);
     console.log("Email sent successfully.");
   } catch (error) {
     console.error("Failed to send email:", error);
