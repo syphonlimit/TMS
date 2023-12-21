@@ -791,7 +791,6 @@ exports.updateTasknotes = catchAsyncErrors(async (req, res, next) => {
   } catch (err) {
     return false;
   }
-
   //We should append the notes to the existing notes, so we need to get the existing notes first
   const existing_notes = row[0].Task_notes;
   //Append the existing notes with the new notes
@@ -1161,7 +1160,7 @@ async function sendEmailToProjectLead(taskName, taskOwner, Task_app_acronym) {
 
   // Send the email
   try {
-    //transporter.sendMail(mailOptions);
+    transporter.sendMail(mailOptions);
     console.log("Email sent successfully.");
   } catch (error) {
     console.error("Failed to send email:", error);

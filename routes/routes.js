@@ -53,7 +53,7 @@ router.route("/createApp").post(isAuthenticatedUser, authorizeRoles("PL"), creat
 router.route("/updateApp/:appname").put(isAuthenticatedUser, authorizeRoles("PL"), updateApp);
 
 //Plans
-router.route("/getPlans").post(isAuthenticatedUser, authorizeRoles("PM", "PL"), getPlans);
+router.route("/getPlans").post(isAuthenticatedUser, getPlans);
 router.route("/updatePlan").post(isAuthenticatedUser, authorizeRoles("PM"), updatePlan);
 router.route("/createPlan").post(isAuthenticatedUser, authorizeRoles("PM"), createPlan);
 
