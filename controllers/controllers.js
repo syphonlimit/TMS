@@ -699,7 +699,7 @@ exports.createTask = catchAsyncErrors(async (req, res, next) => {
 
   const date = new Date(Date.now());
   const formattedDate = date.toLocaleString();
-  let notes = "Opened by " + decoded.username + " on " + formattedDate;
+  let notes = "Set to Open state by " + decoded.username + " on " + formattedDate;
   let rnum = await connection.promise().execute("SELECT App_Rnumber FROM application where App_Acronym = ?", [acronym]);
   let rnumber = rnum[0][0].App_Rnumber + 1;
   let Task_id = acronym + rnumber;
@@ -793,8 +793,20 @@ exports.updateTasknotes = catchAsyncErrors(async (req, res, next) => {
   }
   //We should append the notes to the existing notes, so we need to get the existing notes first
   const existing_notes = row[0].Task_notes;
+  const taskState = row[0].Task_state;
   //Append the existing notes with the new notes
-  req.body.note = req.body.note + " by " + decoded.username + " " + formattedDate + "\n\n" + existing_notes;
+  req.body.note =
+    req.body.note +
+    " by " +
+    decoded.username +
+    " at " +
+    taskState +
+    " state on " +
+    formattedDate +
+    "\n\n" +
+    "-".repeat(100) +
+    "\n\n" +
+    existing_notes;
 
   //Update notes
   const result = await connection.promise().execute("UPDATE task SET Task_notes = ? WHERE Task_id = ?", [req.body.note, req.params.taskId]);
@@ -826,6 +838,7 @@ exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
   if (row2.length === 0) {
     return next(new ErrorResponse("Task does not exist", 404));
   }
+  const taskState = row2[0].Task_state;
 
   //Check if application exists
   const [row3, fields3] = await connection.promise().query("SELECT * FROM application WHERE App_Acronym = ?", [acronym]);
@@ -849,14 +862,15 @@ exports.assignTaskToPlan = catchAsyncErrors(async (req, res, next) => {
   let Added_Task_notes;
   if (req.body.note === undefined || req.body.note === null || req.body.note === "") {
     //append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
-    Added_Task_notes = Task_owner + " assigned " + row2[0].Task_name + " to " + plan + " " + formattedDate;
+    Added_Task_notes = Task_owner + " assigned " + row2[0].Task_name + " to " + plan + " plan at " + taskState + " state on " + formattedDate;
   } else {
     //Get the Task_notes from the req.body.Task_notes and append {Task_owner} assigned {Task_name} to {Plan_MVP_name} to the end of Task_note
-    Added_Task_notes = Task_owner + " assigned " + row2[0].Task_name + " to " + plan + "\n" + req.body.note + " " + formattedDate;
+    Added_Task_notes =
+      Task_owner + " assigned " + row2[0].Task_name + " to " + plan + "\n" + req.body.note + " plan at " + taskState + " state on " + formattedDate;
   }
 
   //Append Task_notes to the preexisting Task_notes
-  const Task_notes = Added_Task_notes + "\n\n" + row2[0].Task_notes;
+  const Task_notes = Added_Task_notes + "\n\n" + "-".repeat(100) + "\n\n" + row2[0].Task_notes;
 
   //Update the task including the task_owner
   const result = await connection
@@ -1003,7 +1017,7 @@ exports.returnTask = catchAsyncErrors(async (req, res, next) => {
   }
 
   //Append Task_notes to the preexisting Task_notes
-  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+  const Task_notes = Added_Task_notes + "\n\n" + "-".repeat(100) + "\n\n" + row[0].Task_notes;
 
   //Update the task
   const result = await connection
@@ -1098,7 +1112,7 @@ exports.promoteTask = catchAsyncErrors(async (req, res, next) => {
   }
 
   //Append Task_notes to the preexisting Task_notes, I want it to have two new lines between the old notes and the new notes
-  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+  const Task_notes = Added_Task_notes + "\n\n" + "-".repeat(100) + "\n\n" + row[0].Task_notes;
   //Update the task
   const result = await connection
     .promise()
@@ -1229,7 +1243,7 @@ exports.rejectTask = catchAsyncErrors(async (req, res, next) => {
   }
 
   //Append Task_notes to the preexisting Task_notes
-  const Task_notes = Added_Task_notes + "\n\n" + row[0].Task_notes;
+  const Task_notes = Added_Task_notes + "\n\n" + "-".repeat(100) + "\n\n" + row[0].Task_notes;
 
   //Task_plan can be updated if it is provided
   let Task_plan;
